@@ -10,30 +10,33 @@ N_z = 128
 b2 = 0.2
 b3 = 0.3
 
+t1 = 0.2
+t2 = 0.02
+
 # 3 layers of neurons - output arrays
 x = np.zeros(N_x)
 y = np.zeros(N_y)
 z = np.zeros(N_z)
 
 # synapse weights matrices
-W_xy = np.random.rand(N_x, N_y)
-W_yz = np.random.rand(N_y, N_z)
+W_xy = np.random.rand(N_x, N_y) * 0.001
+W_yz = np.random.rand(N_y, N_z) * 0.001
 
 
-def z_update(y: ndarray, z: ndarray, W_yz: ndarray):
-    z += np.dot(W_yz, softmax(b2 * y)) - z
+def z_update(y: ndarray, W_yz: ndarray):
+    return np.dot(W_yz, softmax(b2 * y))
 
 
-def y_update(x: ndarray, y: ndarray, z: ndarray, W_xy: ndarray, W_yz: ndarray):
+def y_update(x: ndarray, z: ndarray, W_xy: ndarray, W_yz: ndarray):
     W_yzT = W_yz.T
 
-    y += np.dot(W_yzT, softmax(b3 * z)) + np.dot(W_xy, x) - y
+    return np.dot(W_yzT, softmax(b3 * z)) + np.dot(W_xy, x)
 
 
-def x_update(x: ndarray, y: ndarray, W_xy: ndarray):
+def x_update(y: ndarray, W_xy: ndarray):
     W_xyT = W_xy.T
 
-    x += np.dot(W_xyT, softmax(b2 * y)) - x
+    return np.dot(W_xyT, softmax(b2 * y))
 
 
 def energy_last_term(x: ndarray, y: ndarray, W_xy: ndarray):
@@ -53,9 +56,29 @@ def energy_func(x: ndarray, y: ndarray, z: ndarray, W_xy: ndarray):
     return energy
 
 
-def feedforward():
-    pass
+def feedforward_sync(inp: ndarray, y: ndarray, z: ndarray, W_xy: ndarray, W_yz: ndarray, iter_cnt: int = 100):
+    x = np.copy(inp)
+
+    energy = energy_func(x, y, z, W_xy)
+    print(f'start_{energy=}')
+
+    prev_energy = energy
+    for iter_idx in range(iter_cnt):
+        prev_x = np.copy(x)
+        prev_y = np.copy(y)
+        prev_z = np.copy(z)
+
+        x = x_update(prev_y, W_xy)
+        y = y_update(prev_x, prev_z, W_xy, W_yz)
+        z = z_update(prev_y, W_yz)
+
+        energy = energy_func(x, y, z, W_xy)
+        print(f'{energy=}')
+        print(f'{(energy - prev_energy)=}')
+        prev_energy = energy
 
 
 def test_feedforward():
-    pass
+    inp = np.random.rand(x.size)
+
+    feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100)
