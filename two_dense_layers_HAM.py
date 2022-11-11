@@ -73,12 +73,18 @@ def feedforward_sync(inp: ndarray, y: ndarray, z: ndarray, W_xy: ndarray, W_yz: 
         z = z_update(prev_y, W_yz)
 
         energy = energy_func(x, y, z, W_xy)
-        print(f'{energy=}')
+        print(f'{iter_idx=} : {energy=}')
         print(f'{(energy - prev_energy)=}')
+        if (energy - prev_energy) == 0.0:
+            break
+
         prev_energy = energy
 
 
 def test_feedforward():
     inp = np.random.rand(x.size)
 
-    feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=10)
+    feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100 * 5)
+
+
+test_feedforward()
