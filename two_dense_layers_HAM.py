@@ -4,14 +4,16 @@ from numpy import ndarray
 from scipy.special import softmax
 
 N_x = 128
-N_y = 128
+N_y = 128 * 2
 N_z = 128
 
 b2 = 0.2
 b3 = 0.3
 
-t_x = 0.2
-t_y = 0.02
+speed = 0.1
+
+t_x = 0.2 * speed
+t_y = 0.002 * speed
 
 # 3 layers of neurons - output arrays
 x = np.zeros(N_x)
@@ -19,8 +21,8 @@ y = np.zeros(N_y)
 z = np.zeros(N_z)
 
 # synapse weights matrices
-W_xy = np.random.rand(N_x, N_y) * 0.001
-W_yz = np.random.rand(N_y, N_z) * 0.001
+W_xy = np.random.rand(N_y, N_x) * 0.001
+W_yz = np.random.rand(N_z, N_y) * 0.001
 
 
 def z_update(y: ndarray, W_yz: ndarray):
@@ -75,16 +77,23 @@ def feedforward_sync(inp: ndarray, y: ndarray, z: ndarray, W_xy: ndarray, W_yz: 
         energy = energy_func(x, y, z, W_xy)
         print(f'{iter_idx=} : {energy=}')
         print(f'{(energy - prev_energy)=}')
-        if (energy - prev_energy) == 0.0:
+
+        if (energy - prev_energy) >= 0.0:
+            x = np.copy(prev_x)
+            y = np.copy(prev_y)
+            z = np.copy(prev_z)
+
             break
 
         prev_energy = energy
+
+    return x, y, z
 
 
 def test_feedforward():
     inp = np.random.rand(x.size)
 
-    feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100 * 5)
+    feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100)
 
 
 test_feedforward()
