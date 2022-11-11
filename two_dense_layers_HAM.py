@@ -34,3 +34,20 @@ def x_update(x: ndarray, y: ndarray, W_xy: ndarray):
     W_xyT = W_xy.T
 
     x += np.dot(W_xyT, softmax(b2 * y)) - x
+
+
+def energy_last_term(x: ndarray, y: ndarray, W_xy: ndarray):
+    y_sf = softmax(b2 * y)
+    x_out = np.dot(W_xy, x)
+
+    return np.sum(y_sf * x_out[np.newaxis].T)
+
+
+def energy_func(x: ndarray, y: ndarray, z: ndarray, W_xy: ndarray):
+    energy = np.sum(x ** 2) / 2
+    energy += np.sum(softmax(b2 * y) * y)
+    energy -= np.log(np.sum(np.exp(b2 * y))) / b2
+    energy -= np.log(np.sum(np.exp(b3 * z))) / b3
+    energy -= energy_last_term(x, y, W_xy)
+
+    return energy
