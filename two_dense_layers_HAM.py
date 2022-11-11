@@ -51,3 +51,11 @@ def energy_func(x: ndarray, y: ndarray, z: ndarray, W_xy: ndarray):
     energy -= energy_last_term(x, y, W_xy)
 
     return energy
+
+
+def feedforward():
+    pass
+
+
+def test_feedforward():
+    pass
