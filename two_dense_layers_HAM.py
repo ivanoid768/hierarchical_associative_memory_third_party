@@ -1,7 +1,17 @@
+from collections import namedtuple
+from typing import NamedTuple, List
+
 import numpy as np
 from numpy import ndarray
 
 from scipy.special import softmax
+
+
+class IterState(NamedTuple):
+    x: ndarray
+    y: ndarray
+    z: ndarray
+
 
 N_x = 128
 N_y = 128 * 2
@@ -64,6 +74,8 @@ def feedforward_sync(inp: ndarray, y: ndarray, z: ndarray, W_xy: ndarray, W_yz: 
     energy = energy_func(x, y, z, W_xy)
     print(f'start_{energy=}')
 
+    iters_states = []
+
     prev_energy = energy
     for iter_idx in range(iter_cnt):
         prev_x = np.copy(x)
@@ -83,17 +95,66 @@ def feedforward_sync(inp: ndarray, y: ndarray, z: ndarray, W_xy: ndarray, W_yz: 
             y = np.copy(prev_y)
             z = np.copy(prev_z)
 
+            iter_state = IterState(x, y, z)
+            iters_states.append(iter_state)
             break
 
         prev_energy = energy
 
-    return x, y, z
+        iter_state = IterState(x, y, z)
+        iters_states.append(iter_state)
+
+    return iters_states
 
 
 def test_feedforward():
     inp = np.random.rand(x.size)
 
-    feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100)
+    iter_outs = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100)
+    print(f'{len(iter_outs)=}, {iter_outs[0].z.shape}')
+
+
+def x_fd(x: ndarray):
+    pass
+
+
+def y_fd(err: ndarray):
+    s = softmax(err)
+    return np.diag(s) - np.outer(s, s)
+
+
+def z_fd(err: ndarray):
+    s = softmax(err)
+    return np.diag(s) - np.outer(s, s)
+
+
+def train_last_iter(inp: ndarray, iter_state: IterState, lr: float, W_xy: ndarray, W_yz: ndarray):
+    x = iter_state.x
+    x_err: ndarray = x - inp
+    W_xy_update: ndarray = W_xy.T * lr * x_err
+    y_bp_out: ndarray = np.dot(W_xy.T, x_err)
+
+    y = iter_state.y
+    y_err: ndarray = y - y_bp_out
+    W_yz_update: ndarray = W_yz.T * lr * y_fd(y_err)
+    z_bp_out: ndarray = np.dot(W_yz.T, y_fd(y_err))
+
+    z = iter_state.z
+    z_err: ndarray = z - z_bp_out
+
+    return x_err, y_err, z_err, W_xy_update, W_yz_update
+
+
+def train_batch(input_list: List[ndarray], y: ndarray, z: ndarray, W_xy: ndarray, W_yz: ndarray,
+                iter_cnt: int = 100,
+                epoch_cnt: int = 100, ):
+    for inp in input_list:
+        iter_outs = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
+
+        last_inter_state = iter_outs[-1]
+
+        for iter_idx, iter_state in enumerate(reversed(iter_outs)):
+            pass
 
 
 test_feedforward()
