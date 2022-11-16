@@ -118,9 +118,13 @@ def x_fd(x: ndarray):
     pass
 
 
-def y_fd(err: ndarray):
-    s = softmax(err)
-    return np.diag(s) - np.outer(s, s)
+def y_fd(y, err: ndarray):
+    sfm = np.reshape(y, (1, -1))
+    grad = np.reshape(err, (1, -1))
+
+    d_softmax = (sfm * np.identity(sfm.size) - sfm.transpose() @ sfm)
+
+    return (grad @ d_softmax).ravel()
 
 
 def z_fd(err: ndarray):
@@ -136,8 +140,8 @@ def train_last_iter(inp: ndarray, iter_state: IterState, lr: float, W_xy: ndarra
 
     y = iter_state.y
     y_err: ndarray = y - y_bp_out
-    W_yz_update: ndarray = W_yz.T * lr * y_fd(y_err)
-    z_bp_out: ndarray = np.dot(W_yz.T, y_fd(y_err))
+    W_yz_update: ndarray = W_yz.T * lr * y_fd(y, y_err)
+    z_bp_out: ndarray = np.dot(W_yz.T, y_fd(y, y_err))
 
     z = iter_state.z
     z_err: ndarray = z - z_bp_out
