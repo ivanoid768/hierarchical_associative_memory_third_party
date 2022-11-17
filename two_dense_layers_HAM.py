@@ -20,7 +20,7 @@ N_z = 128
 b2 = 0.2
 b3 = 0.3
 
-speed = 0.1
+speed = 0.01
 
 t_x = 0.2 * speed
 t_y = 0.002 * speed
@@ -53,14 +53,14 @@ def x_update(x: ndarray, y: ndarray, W_xy: ndarray, t: float):
 
 def energy_last_term(x: ndarray, y: ndarray, W_xy: ndarray):
     y_sf = softmax(b2 * y)
-    x_out = np.dot(W_xy, x)
-
-    return np.sum(y_sf * x_out[np.newaxis].T)
+    # x_out = np.dot(W_xy, x)
+    # return np.sum(y_sf * x_out[np.newaxis].T)
+    return np.sum(y_sf)
 
 
 def energy_func(x: ndarray, y: ndarray, z: ndarray, W_xy: ndarray):
-    energy = np.sum(x ** 2) / 2
-    energy += np.sum(softmax(b2 * y) * y)
+    # energy = np.sum(x ** 2) / 2
+    energy = np.sum(softmax(b2 * y) * y)
     energy -= np.log(np.sum(np.exp(b2 * y))) / b2
     energy -= np.log(np.sum(np.exp(b3 * z))) / b3
     energy -= energy_last_term(x, y, W_xy)
@@ -82,7 +82,7 @@ def feedforward_sync(inp: ndarray, y: ndarray, z: ndarray, W_xy: ndarray, W_yz: 
         prev_y = np.copy(y)
         prev_z = np.copy(z)
 
-        x = x_update(prev_x, prev_y, W_xy, t_x)
+        # x = x_update(prev_x, prev_y, W_xy, t_x)
         y = y_update(prev_x, prev_y, prev_z, W_xy, W_yz, t_y)
         z = z_update(prev_y, W_yz)
 
@@ -112,6 +112,13 @@ def test_feedforward():
 
     iter_outs = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100)
     print(f'{len(iter_outs)=}, {iter_outs[0].z.shape}')
+    print((iter_outs[-1].x - iter_outs[0].x).tolist())
+    print((iter_outs[-1].y - iter_outs[0].y).tolist())
+    print((iter_outs[-1].z - iter_outs[0].z).tolist())
+
+    print(iter_outs[-1].x.tolist())
+    print(iter_outs[-1].y.tolist())
+    print(iter_outs[-1].z.tolist())
 
 
 def x_fd(x: ndarray):
