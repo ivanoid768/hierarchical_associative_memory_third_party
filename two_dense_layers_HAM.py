@@ -115,38 +115,79 @@ def test_feedforward():
 
 
 def x_fd(x: ndarray):
-    pass
+    return np.ones(x.size)
 
 
-def y_fd(y, err: ndarray):
+def y_fd(y, err_grad: ndarray):
     sfm = np.reshape(y, (1, -1))
-    grad = np.reshape(err, (1, -1))
+    grad = np.reshape(err_grad, (1, -1))
 
     d_softmax = (sfm * np.identity(sfm.size) - sfm.transpose() @ sfm)
 
     return (grad @ d_softmax).ravel()
 
 
-def z_fd(err: ndarray):
-    s = softmax(err)
-    return np.diag(s) - np.outer(s, s)
+def z_fd(z: ndarray, err_grad: ndarray):
+    sfm = np.reshape(z, (1, -1))
+    grad = np.reshape(err_grad, (1, -1))
+
+    d_softmax = (sfm * np.identity(sfm.size) - sfm.transpose() @ sfm)
+
+    return (grad @ d_softmax).ravel()
 
 
 def train_last_iter(inp: ndarray, iter_state: IterState, lr: float, W_xy: ndarray, W_yz: ndarray):
-    x = iter_state.x
-    x_err: ndarray = x - inp
-    W_xy_update: ndarray = W_xy.T * lr * x_err
-    y_bp_out: ndarray = np.dot(W_xy.T, x_err)
+    (x, y, z) = iter_state
 
-    y = iter_state.y
-    y_err: ndarray = y - y_bp_out
-    W_yz_update: ndarray = W_yz.T * lr * y_fd(y, y_err)
-    z_bp_out: ndarray = np.dot(W_yz.T, y_fd(y, y_err))
+    # mse = np.sum((x - inp) ** 2) / x.size
+    # print(f'{mse=}')
 
-    z = iter_state.z
-    z_err: ndarray = z - z_bp_out
+    x_err: ndarray = (x - inp) * x_fd(x)
+    xy_dW = np.dot(y[np.newaxis].T, x_err[np.newaxis])
 
-    return x_err, y_err, z_err, W_xy_update, W_yz_update
+    y_err: ndarray = y_fd(y, np.dot(x_err, W_xy.T))
+    # yz_dW = np.dot(y_err, z.T)
+    yz_dW = np.dot(z[np.newaxis].T, y_err[np.newaxis])
+
+    z_err: ndarray = z_fd(z, np.dot(y_err, W_yz.T))
+
+    # error_i = np.multiply(self.layers[i + 1].weights.T.dot(error_o), self.layers[i].activation_grad())
+    # delta_w[i + 1] = error_o.dot(self.layers[i].a.T) / len(y)
+
+    # layer.weights = layer.weights - (lr * delta_w[i])
+
+    # update weights
+    W_xy -= lr * xy_dW
+    W_yz -= lr * yz_dW
+
+    return x_err, y_err, z_err
+
+
+def test_last_iter_train():
+    inp = np.random.rand(x.size)
+
+    iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100)
+    print(f'{len(iter_states)=}, {iter_states[0].z.shape}')
+    mse = np.sum((iter_states[-1].x - inp) ** 2) / x.size
+    print(f'{mse=}')
+
+    prev_mse = mse
+    first_mse = mse
+    epoch_cnt = 100
+    lr0 = 0.01
+    for idx in range(epoch_cnt):
+        x_err, y_err, z_err = train_last_iter(inp, iter_states[-1], lr=(epoch_cnt - idx) * lr0, W_xy=W_xy, W_yz=W_yz)
+        print(f'{x_err=} {y_err=} {z_err=}')
+
+        iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100)
+        print(f'{len(iter_states)=}, {iter_states[0].z.shape}')
+
+        mse = np.sum((iter_states[-1].x - inp) ** 2) / x.size
+        print(f'{mse=}')
+        # mse = np.sum((x - inp) ** 2) / x.size
+        print(f'{prev_mse=} {mse=} {(mse - prev_mse)=}')
+        print(f'{first_mse=} {mse=} {(mse - first_mse)=}')
+        prev_mse = mse
 
 
 def train_batch(input_list: List[ndarray], y: ndarray, z: ndarray, W_xy: ndarray, W_yz: ndarray,
@@ -161,4 +202,5 @@ def train_batch(input_list: List[ndarray], y: ndarray, z: ndarray, W_xy: ndarray
             pass
 
 
-test_feedforward()
+# test_feedforward()
+test_last_iter_train()
