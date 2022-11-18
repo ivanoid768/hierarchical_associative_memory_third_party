@@ -13,6 +13,17 @@ class IterState(NamedTuple):
     z: ndarray
 
 
+class IterError(NamedTuple):
+    x: ndarray
+    y: ndarray
+    z: ndarray
+
+
+class DeltaWeight(NamedTuple):
+    xy: ndarray
+    yz: ndarray
+
+
 N_x = 128
 N_y = 128 * 2
 N_z = 128
@@ -151,16 +162,42 @@ def train_last_iter(inp: ndarray, iter_state: IterState, lr: float, W_xy: ndarra
 
     z_err: ndarray = z_fd(z, np.dot(y_err, W_yz.T))
 
-    # error_i = np.multiply(self.layers[i + 1].weights.T.dot(error_o), self.layers[i].activation_grad())
-    # delta_w[i + 1] = error_o.dot(self.layers[i].a.T) / len(y)
-
-    # layer.weights = layer.weights - (lr * delta_w[i])
-
     # update weights
     W_xy -= lr * xy_dW
     W_yz -= lr * yz_dW
 
-    return x_err, y_err, z_err
+    error = IterError(x_err, y_err, z_err)
+    return error
+
+
+def train_iter(iter_state: IterState, prev_err: IterError,
+               W_xy: ndarray, W_yz: ndarray, dW_sum: DeltaWeight, ):
+    (x, y, z) = iter_state
+
+    x_err: ndarray = np.dot(prev_err.y, W_xy.T) * x_fd(x)
+    xy_dW = np.dot(x[np.newaxis].T, prev_err.y[np.newaxis])
+
+    y_err_from_x: ndarray = y_fd(y, np.dot(prev_err.x, W_xy))
+    y_err_from_z: ndarray = y_fd(y, np.dot(prev_err.z, W_yz.T))
+    y_err: ndarray = (y_err_from_x + y_err_from_z) / 2
+
+    yz_dW_from_x = np.dot(y[np.newaxis].T, y_err_from_x[np.newaxis])
+    yz_dW_from_z = np.dot(y[np.newaxis].T, y_err_from_z[np.newaxis])
+
+    z_err: ndarray = z_fd(z, np.dot(prev_err.y, W_yz.T))
+    yz_dW = np.dot(z[np.newaxis].T, prev_err.y[np.newaxis])
+
+    dW_sum.xy += (xy_dW + yz_dW_from_x) / 2
+    dW_sum.yz += (yz_dW + yz_dW_from_z) / 2
+
+    return IterError(x_err, y_err, z_err), dW_sum
+
+
+def update_weights(lr: float, W_xy: ndarray, W_yz: ndarray, dW_sum: DeltaWeight, iter_states_len: int):
+    W_xy -= lr * (dW_sum.xy / iter_states_len)
+    W_yz -= lr * (dW_sum.yz / iter_states_len)
+
+    return W_xy, W_yz
 
 
 def test_last_iter_train():
@@ -173,11 +210,17 @@ def test_last_iter_train():
 
     prev_mse = mse
     first_mse = mse
-    epoch_cnt = 100
+    epoch_cnt = 1
     lr0 = 0.01
+    dW_sum = DeltaWeight(np.zeros(W_xy.shape), np.zeros(W_yz.shape))
     for idx in range(epoch_cnt):
-        x_err, y_err, z_err = train_last_iter(inp, iter_states[-1], lr=(epoch_cnt - idx) * lr0, W_xy=W_xy, W_yz=W_yz)
-        print(f'{x_err=} {y_err=} {z_err=}')
+        err = train_last_iter(inp, iter_states[-1], lr=(epoch_cnt - idx) * lr0, W_xy=W_xy, W_yz=W_yz)
+        print(f'{err.x=} {err.y=} {err.z=}')
+
+        iter_err, dW_sum = train_iter(iter_state=iter_states[-2], prev_err=err, W_xy=W_xy, W_yz=W_yz, dW_sum=dW_sum)
+        print(f'{iter_err.x=} {iter_err.y=} {iter_err.z=}')
+
+        update_weights(lr=(epoch_cnt - idx) * lr0,W_xy=W_xy, W_yz=W_yz, dW_sum=dW_sum, iter_states_len=1)
 
         iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100)
         print(f'{len(iter_states)=}, {iter_states[0].z.shape}')
