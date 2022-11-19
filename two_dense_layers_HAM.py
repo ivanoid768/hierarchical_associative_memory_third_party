@@ -1,4 +1,5 @@
 from collections import namedtuple
+from dataclasses import dataclass
 from typing import NamedTuple, List
 
 import numpy as np
@@ -19,7 +20,8 @@ class IterError(NamedTuple):
     z: ndarray
 
 
-class DeltaWeight(NamedTuple):
+@dataclass
+class DeltaWeight:
     xy: ndarray
     yz: ndarray
 
@@ -98,8 +100,8 @@ def feedforward_sync(inp: ndarray, y: ndarray, z: ndarray, W_xy: ndarray, W_yz: 
         z = z_update(prev_y, W_yz)
 
         energy = energy_func(x, y, z, W_xy)
-        print(f'{iter_idx=} : {energy=}')
-        print(f'{(energy - prev_energy)=}')
+        # print(f'{iter_idx=} : {energy=}')
+        # print(f'{(energy - prev_energy)=}')
 
         if (energy - prev_energy) >= 0.0:
             x = np.copy(prev_x)
@@ -114,6 +116,9 @@ def feedforward_sync(inp: ndarray, y: ndarray, z: ndarray, W_xy: ndarray, W_yz: 
 
         iter_state = IterState(x, y, z)
         iters_states.append(iter_state)
+
+    print(f'{energy=}')
+    print(f'{(energy - prev_energy)=}')
 
     return iters_states
 
@@ -163,32 +168,33 @@ def train_last_iter(inp: ndarray, iter_state: IterState, lr: float, W_xy: ndarra
     z_err: ndarray = z_fd(z, np.dot(y_err, W_yz.T))
 
     # update weights
-    W_xy -= lr * xy_dW
-    W_yz -= lr * yz_dW
+    # W_xy -= lr * xy_dW
+    # W_yz -= lr * yz_dW
 
     error = IterError(x_err, y_err, z_err)
-    return error
+    dW_sum = DeltaWeight(xy_dW, yz_dW)
+    return error, dW_sum
 
 
 def train_iter(iter_state: IterState, prev_err: IterError,
                W_xy: ndarray, W_yz: ndarray, dW_sum: DeltaWeight, ):
     (x, y, z) = iter_state
 
-    x_err: ndarray = np.dot(prev_err.y, W_xy.T) * x_fd(x)
+    x_err: ndarray = np.dot(prev_err.y, W_xy) * x_fd(x)
     xy_dW = np.dot(x[np.newaxis].T, prev_err.y[np.newaxis])
 
-    y_err_from_x: ndarray = y_fd(y, np.dot(prev_err.x, W_xy))
-    y_err_from_z: ndarray = y_fd(y, np.dot(prev_err.z, W_yz.T))
+    y_err_from_x: ndarray = y_fd(y, np.dot(prev_err.x, W_xy.T))
+    y_err_from_z: ndarray = y_fd(y, np.dot(prev_err.z, W_yz))
     y_err: ndarray = (y_err_from_x + y_err_from_z) / 2
 
-    yz_dW_from_x = np.dot(y[np.newaxis].T, y_err_from_x[np.newaxis])
-    yz_dW_from_z = np.dot(y[np.newaxis].T, y_err_from_z[np.newaxis])
+    yz_dW_from_x = np.dot(y[np.newaxis].T, prev_err.x[np.newaxis])
+    yz_dW_from_z = np.dot(y[np.newaxis].T, prev_err.z[np.newaxis])
 
     z_err: ndarray = z_fd(z, np.dot(prev_err.y, W_yz.T))
     yz_dW = np.dot(z[np.newaxis].T, prev_err.y[np.newaxis])
 
-    dW_sum.xy += (xy_dW + yz_dW_from_x) / 2
-    dW_sum.yz += (yz_dW + yz_dW_from_z) / 2
+    dW_sum.xy += (xy_dW.T + yz_dW_from_x) / 2
+    dW_sum.yz += (yz_dW + yz_dW_from_z.T) / 2
 
     return IterError(x_err, y_err, z_err), dW_sum
 
@@ -220,7 +226,7 @@ def test_last_iter_train():
         iter_err, dW_sum = train_iter(iter_state=iter_states[-2], prev_err=err, W_xy=W_xy, W_yz=W_yz, dW_sum=dW_sum)
         print(f'{iter_err.x=} {iter_err.y=} {iter_err.z=}')
 
-        update_weights(lr=(epoch_cnt - idx) * lr0,W_xy=W_xy, W_yz=W_yz, dW_sum=dW_sum, iter_states_len=1)
+        update_weights(lr=(epoch_cnt - idx) * lr0, W_xy=W_xy, W_yz=W_yz, dW_sum=dW_sum, iter_states_len=1)
 
         iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100)
         print(f'{len(iter_states)=}, {iter_states[0].z.shape}')
@@ -245,5 +251,33 @@ def train_batch(input_list: List[ndarray], y: ndarray, z: ndarray, W_xy: ndarray
             pass
 
 
+def test_iter_train(lr0: float = 0.01, iter_cnt: int = 100):
+    inp = np.random.rand(x.size)
+
+    iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
+    print(f'{len(iter_states)=}, {iter_states[0].z.shape}')
+    mse = np.sum((iter_states[-1].x - inp) ** 2) / x.size
+    print(f'{mse=}')
+
+    iter_err, dW_sum = train_last_iter(inp, iter_states[-1], lr=lr0, W_xy=W_xy, W_yz=W_yz)
+
+    prev_mse = mse
+    first_mse = mse
+    for iter_state in reversed(iter_states[0: -1]):
+        iter_err, dW_sum = train_iter(iter_state=iter_state, prev_err=iter_err, W_xy=W_xy, W_yz=W_yz, dW_sum=dW_sum)
+
+    update_weights(lr=lr0, W_xy=W_xy, W_yz=W_yz, dW_sum=dW_sum, iter_states_len=len(iter_states))
+
+    iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
+    print(f'{len(iter_states)=}, {iter_states[0].z.shape}')
+
+    mse = np.sum((iter_states[-1].x - inp) ** 2) / x.size
+    print(f'{mse=}')
+    # mse = np.sum((x - inp) ** 2) / x.size
+    print(f'{prev_mse=} {mse=} {(mse - prev_mse)=}')
+    print(f'{first_mse=} {mse=} {(mse - first_mse)=}')
+
+
 # test_feedforward()
-test_last_iter_train()
+# test_last_iter_train()
+test_iter_train(lr0=0.01)
