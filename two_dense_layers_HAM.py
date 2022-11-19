@@ -159,9 +159,6 @@ def z_fd(z: ndarray, err_grad: ndarray):
 def train_last_iter(inp: ndarray, iter_state: IterState, lr: float, W_xy: ndarray, W_yz: ndarray):
     (x, y, z) = iter_state
 
-    # mse = np.sum((x - inp) ** 2) / x.size
-    # print(f'{mse=}')
-
     x_err: ndarray = (x - inp) * x_fd(x)
     xy_dW = np.dot(y[np.newaxis].T, x_err[np.newaxis])
 
@@ -170,10 +167,6 @@ def train_last_iter(inp: ndarray, iter_state: IterState, lr: float, W_xy: ndarra
     yz_dW = np.dot(z[np.newaxis].T, y_err[np.newaxis])
 
     z_err: ndarray = z_fd(z, np.dot(y_err, W_yz.T))
-
-    # update weights
-    # W_xy -= lr * xy_dW
-    # W_yz -= lr * yz_dW
 
     error = IterError(x_err, y_err, z_err)
     dW_sum = DeltaWeight(xy_dW, yz_dW)
@@ -208,51 +201,6 @@ def update_weights(lr: float, W_xy: ndarray, W_yz: ndarray, dW_sum: DeltaWeight,
     W_yz -= lr * (dW_sum.yz / iter_states_len)
 
     return W_xy, W_yz
-
-
-def test_last_iter_train():
-    inp = np.random.rand(x.size)
-
-    iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100)
-    print(f'{len(iter_states)=}, {iter_states[0].z.shape}')
-    mse = np.sum((iter_states[-1].x - inp) ** 2) / x.size
-    print(f'{mse=}')
-
-    prev_mse = mse
-    first_mse = mse
-    epoch_cnt = 1
-    lr0 = 0.01
-    dW_sum = DeltaWeight(np.zeros(W_xy.shape), np.zeros(W_yz.shape))
-    for idx in range(epoch_cnt):
-        err = train_last_iter(inp, iter_states[-1], lr=(epoch_cnt - idx) * lr0, W_xy=W_xy, W_yz=W_yz)
-        print(f'{err.x=} {err.y=} {err.z=}')
-
-        iter_err, dW_sum = train_iter(iter_state=iter_states[-2], prev_err=err, W_xy=W_xy, W_yz=W_yz, dW_sum=dW_sum)
-        print(f'{iter_err.x=} {iter_err.y=} {iter_err.z=}')
-
-        update_weights(lr=(epoch_cnt - idx) * lr0, W_xy=W_xy, W_yz=W_yz, dW_sum=dW_sum, iter_states_len=1)
-
-        iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=100)
-        print(f'{len(iter_states)=}, {iter_states[0].z.shape}')
-
-        mse = np.sum((iter_states[-1].x - inp) ** 2) / x.size
-        print(f'{mse=}')
-        # mse = np.sum((x - inp) ** 2) / x.size
-        print(f'{prev_mse=} {mse=} {(mse - prev_mse)=}')
-        print(f'{first_mse=} {mse=} {(mse - first_mse)=}')
-        prev_mse = mse
-
-
-def train_batch(input_list: List[ndarray], y: ndarray, z: ndarray, W_xy: ndarray, W_yz: ndarray,
-                iter_cnt: int = 100,
-                epoch_cnt: int = 100, ):
-    for inp in input_list:
-        iter_outs = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
-
-        last_inter_state = iter_outs[-1]
-
-        for iter_idx, iter_state in enumerate(reversed(iter_outs)):
-            pass
 
 
 def test_iter_train(lr0: float = 0.01, iter_cnt: int = 100):
@@ -308,6 +256,5 @@ def train_one(epoch_cnt: int = 10, lr0: float = 0.01, iter_cnt: int = 100):
 
 
 # test_feedforward()
-# test_last_iter_train()
 # test_iter_train(lr0=0.01)
-train_one(epoch_cnt=100 * 3, lr0=0.01, iter_cnt=100)
+train_one(epoch_cnt=100, lr0=0.1, iter_cnt=100)
