@@ -257,4 +257,4 @@ def train_one(epoch_cnt: int = 10, lr0: float = 0.01, iter_cnt: int = 100):
 
 # test_feedforward()
 # test_iter_train(lr0=0.01)
-train_one(epoch_cnt=100, lr0=0.1, iter_cnt=100)
+train_one(epoch_cnt=100, lr0=0.08, iter_cnt=100)
