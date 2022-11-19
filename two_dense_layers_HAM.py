@@ -310,4 +310,4 @@ def train_one(epoch_cnt: int = 10, lr0: float = 0.01, iter_cnt: int = 100):
 # test_feedforward()
 # test_last_iter_train()
 # test_iter_train(lr0=0.01)
-train_one(epoch_cnt=100, lr0=0.05, iter_cnt=100)
+train_one(epoch_cnt=100 * 3, lr0=0.01, iter_cnt=100)
