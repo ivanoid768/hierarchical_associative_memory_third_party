@@ -118,7 +118,7 @@ def feedforward_sync(inp: ndarray, y: ndarray, z: ndarray, W_xy: ndarray, W_yz: 
         iter_state = IterState(x, y, z)
         iters_states.append(iter_state)
 
-        real_iter_cnt +=1
+        real_iter_cnt += 1
 
     print(f'{energy=}')
     print(f'{(energy - prev_energy)=}')
@@ -182,7 +182,7 @@ def train_iter(iter_state: IterState, prev_err: IterError,
 
     y_err_from_x: ndarray = np.dot(prev_err.x, W_xy.T)
     y_err_from_z: ndarray = np.dot(prev_err.z, W_yz)
-    y_err: ndarray = y_fd(y, (y_err_from_x + y_err_from_z)/2)
+    y_err: ndarray = y_fd(y, (y_err_from_x + y_err_from_z) / 2)
 
     xy_dW_from_x = np.dot(y[np.newaxis].T, prev_err.x[np.newaxis])
     yz_dW_from_z = np.dot(y[np.newaxis].T, prev_err.z[np.newaxis])
@@ -190,8 +190,8 @@ def train_iter(iter_state: IterState, prev_err: IterError,
     z_err: ndarray = z_fd(z, np.dot(prev_err.y, W_yz.T))
     yz_dW = np.dot(z[np.newaxis].T, prev_err.y[np.newaxis])
 
-    dW_sum.xy += (xy_dW.T + xy_dW_from_x)/2
-    dW_sum.yz += (yz_dW + yz_dW_from_z.T)/2
+    dW_sum.xy += (xy_dW.T + xy_dW_from_x) / 2
+    dW_sum.yz += (yz_dW + yz_dW_from_z.T) / 2
 
     return IterError(x_err, y_err, z_err), dW_sum
 
@@ -232,7 +232,8 @@ def test_iter_train(lr0: float = 0.01, iter_cnt: int = 100):
     print(f'{first_mse=} {mse=} {(mse - first_mse)=}')
 
 
-def train_one(epoch_cnt: int = 10, lr0: float = 0.01, iter_cnt: int = 100):
+def train_one(epoch_cnt: int = 10, lr0: float = 0.01, iter_cnt: int = 100,
+              last_iterations_to_train: int = 10, ):
     inp = np.random.rand(x.size)
     iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
     first_mse = np.sum((iter_states[-1].x - inp) ** 2) / x.size
@@ -246,9 +247,9 @@ def train_one(epoch_cnt: int = 10, lr0: float = 0.01, iter_cnt: int = 100):
         iter_err, dW_sum = train_last_iter(inp, iter_states[-1], lr=lr, W_xy=W_xy, W_yz=W_yz)
         # dW_sum.yz.fill(0)
         # dW_sum.yz.fill(0)
-        for iter_state in reversed(iter_states[0: -1]):
+        for iter_state in reversed(iter_states[-(last_iterations_to_train + 1): -1]):
             iter_err, dW_sum = train_iter(iter_state=iter_state, prev_err=iter_err, W_xy=W_xy, W_yz=W_yz, dW_sum=dW_sum)
-        update_weights(lr=lr, W_xy=W_xy, W_yz=W_yz, dW_sum=dW_sum, iter_states_len=(len(iter_states)-1))
+        update_weights(lr=lr, W_xy=W_xy, W_yz=W_yz, dW_sum=dW_sum, iter_states_len=(len(iter_states) - 1))
 
     iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
     mse = np.sum((iter_states[-1].x - inp) ** 2) / x.size
@@ -257,4 +258,4 @@ def train_one(epoch_cnt: int = 10, lr0: float = 0.01, iter_cnt: int = 100):
 
 # test_feedforward()
 # test_iter_train(lr0=0.01)
-train_one(epoch_cnt=100, lr0=0.08, iter_cnt=100)
+train_one(epoch_cnt=100, lr0=0.1, iter_cnt=100, last_iterations_to_train=2)
