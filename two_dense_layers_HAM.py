@@ -1,6 +1,5 @@
-from collections import namedtuple
 from dataclasses import dataclass
-from typing import NamedTuple, List
+from typing import NamedTuple
 
 import numpy as np
 from numpy import ndarray
