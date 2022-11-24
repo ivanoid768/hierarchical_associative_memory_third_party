@@ -8,6 +8,8 @@ TODO:
    distributions.
 3. Check if number of iterations indicates new cluster. New cluster threshold hyper-parameter.
 4. Clustering on MNIST dataset.
+   1. Loss that depends on generated cluster's label.
+   2. Loss as error between cluster center and new input.
 5. Power(and then normalization) activation function for hidden layer.
 6. Learn weights with 2 algorithms at once - global with BP and local with Hebbian-like rule.
 7. Add lateral inhibitory connections(weights).
