@@ -1,10 +1,12 @@
 from dataclasses import dataclass
-from typing import NamedTuple
+from typing import NamedTuple, List
 
 import numpy as np
 from numpy import ndarray
 
 from scipy.special import softmax
+
+from datapoint_generation import Cluster, generate_clusters
 
 
 class IterState(NamedTuple):
@@ -43,8 +45,8 @@ y = np.zeros(N_y)
 z = np.zeros(N_z)
 
 # synapse weights matrices
-W_xy = np.random.rand(N_y, N_x) * 0.001
-W_yz = np.random.rand(N_z, N_y) * 0.001
+W_xy: ndarray = np.random.rand(N_y, N_x) * 0.001
+W_yz: ndarray = np.random.rand(N_z, N_y) * 0.001
 
 
 def z_update(y: ndarray, W_yz: ndarray):
@@ -255,6 +257,83 @@ def train_one(epoch_cnt: int = 10, lr0: float = 0.01, iter_cnt: int = 100,
     print(f'{first_mse=} {mse=} {(mse - first_mse)=}')
 
 
+def train(inp_batch: List[ndarray],
+          epoch_cnt: int = 10,
+          lr0: float = 0.01,
+          iter_cnt: int = 100,
+          last_iterations_to_train: int = 10, ):
+    global W_xy, W_yz
+
+    mse_sum = 0
+    for inp in inp_batch:
+        iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
+        mse_sum += np.sum((iter_states[-1].x - inp) ** 2) / x.size
+    first_mse = mse_sum / len(inp_batch)
+
+    for epoch_idx in range(epoch_cnt):
+        print(f'{epoch_idx=}')
+        lr = (epoch_cnt - epoch_idx) * lr0
+        print(f'{lr=}')
+
+        dW_batch = DeltaWeight(np.zeros(W_xy.shape), np.zeros(W_yz.shape))
+        for inp in inp_batch:
+            iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
+            iter_err, dW_sum = train_last_iter(inp, iter_states[-1], lr=lr, W_xy=W_xy, W_yz=W_yz)
+            for iter_state in reversed(iter_states[-(last_iterations_to_train + 1): -1]):
+                iter_err, dW_sum = train_iter(iter_state=iter_state, prev_err=iter_err, W_xy=W_xy, W_yz=W_yz,
+                                              dW_sum=dW_sum)
+
+            dW_batch.xy += (dW_sum.xy / last_iterations_to_train)
+            dW_batch.yz += (dW_sum.yz / last_iterations_to_train)
+
+        dW_batch.xy = dW_batch.xy / len(inp_batch)
+        dW_batch.yz = dW_batch.yz / len(inp_batch)
+        W_xy -= lr * dW_batch.xy
+        W_yz -= lr * dW_batch.yz
+
+    mse = 0
+    for inp in inp_batch:
+        iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
+        mse += np.sum((iter_states[-1].x - inp) ** 2) / x.size
+    mse = mse / len(inp_batch)
+
+    print(f'{first_mse=} {mse=} {(mse - first_mse)=}')
+
+
+def test_train():
+    global x
+
+    clusters, x, _ = generate_clusters(ns_clstr=[2, 2, 1], cluster_std=0.04, n_features=x.size)
+
+    batch = [clusters[0].data_points[0], clusters[1].data_points[0]]
+    train(inp_batch=batch, epoch_cnt=100, lr0=0.01, iter_cnt=100, last_iterations_to_train=2)
+
+    real_iter_cnt = []
+
+    print(f'cluster_datapoint')
+    trained_cluster_datapoint = clusters[0].data_points[0]
+    iter_states = feedforward_sync(trained_cluster_datapoint, y, z, W_xy, W_yz, iter_cnt=100)
+    real_iter_cnt.append(len(iter_states))
+
+    print(f'trained_cluster_datapoint')
+    trained_cluster_datapoint = clusters[0].data_points[1]
+    iter_states = feedforward_sync(trained_cluster_datapoint, y, z, W_xy, W_yz, iter_cnt=100)
+    real_iter_cnt.append(len(iter_states))
+
+    print(f'trained_cluster_datapoint_2')
+    trained_cluster_datapoint = clusters[1].data_points[1]
+    iter_states = feedforward_sync(trained_cluster_datapoint, y, z, W_xy, W_yz, iter_cnt=100)
+    real_iter_cnt.append(len(iter_states))
+
+    print(f'new_cluster_datapoint')
+    trained_cluster_datapoint = clusters[2].data_points[0]
+    iter_states = feedforward_sync(trained_cluster_datapoint, y, z, W_xy, W_yz, iter_cnt=100)
+    real_iter_cnt.append(len(iter_states))
+
+    print(f'{real_iter_cnt=}')
+
+
 # test_feedforward()
 # test_iter_train(lr0=0.01)
-train_one(epoch_cnt=100, lr0=0.1, iter_cnt=100, last_iterations_to_train=2)
+# train_one(epoch_cnt=100, lr0=0.1, iter_cnt=100, last_iterations_to_train=2)
+test_train()
