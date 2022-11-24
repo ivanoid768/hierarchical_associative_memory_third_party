@@ -283,8 +283,10 @@ def train(inp_batch: List[ndarray],
                 iter_err, dW_sum = train_iter(iter_state=iter_state, prev_err=iter_err, W_xy=W_xy, W_yz=W_yz,
                                               dW_sum=dW_sum)
 
-            dW_batch.xy += (dW_sum.xy / last_iterations_to_train)
-            dW_batch.yz += (dW_sum.yz / last_iterations_to_train)
+            trained_iter_cnt = min(last_iterations_to_train, len(iter_states))
+            trained_iter_cnt = trained_iter_cnt - 1 if trained_iter_cnt > 1 else 1
+            dW_batch.xy += (dW_sum.xy / trained_iter_cnt)
+            dW_batch.yz += (dW_sum.yz / trained_iter_cnt)
 
         dW_batch.xy = dW_batch.xy / len(inp_batch)
         dW_batch.yz = dW_batch.yz / len(inp_batch)
@@ -297,7 +299,7 @@ def train(inp_batch: List[ndarray],
         mse += np.sum((iter_states[-1].x - inp) ** 2) / x.size
     mse = mse / len(inp_batch)
 
-    print(f'{first_mse=} {mse=} {(mse - first_mse)=}')
+    print(f'{first_mse=} {mse=} {(mse - first_mse)=} {(first_mse / mse if mse else 0)=}')
 
 
 def test_train():
@@ -306,7 +308,7 @@ def test_train():
     clusters, x, _ = generate_clusters(ns_clstr=[2, 2, 1], cluster_std=0.04, n_features=x.size)
 
     batch = [clusters[0].data_points[0], clusters[1].data_points[0]]
-    train(inp_batch=batch, epoch_cnt=100, lr0=0.01, iter_cnt=100, last_iterations_to_train=2)
+    train(inp_batch=batch, epoch_cnt=100, lr0=0.07, iter_cnt=100, last_iterations_to_train=10)
 
     real_iter_cnt = []
 
