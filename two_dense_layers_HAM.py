@@ -162,20 +162,20 @@ def z_fd(z: ndarray, err_grad: ndarray):
     return (grad @ d_softmax).ravel()
 
 
-def train_last_iter(inp: ndarray, iter_state: IterState, lr: float, W_xy: ndarray, W_yz: ndarray):
+def train_last_iter(out: ndarray, iter_state: IterState, lr: float, W_xy: ndarray, W_yz: ndarray):
     (x, y, z) = iter_state
 
-    x_err: ndarray = (x - inp) * x_fd(x)
-    xy_dW = np.dot(y[np.newaxis].T, x_err[np.newaxis])
+    z_err: ndarray = z_fd(z, z - out)
+    yz_dW = np.dot(y[np.newaxis].T, z_err[np.newaxis])
 
-    y_err: ndarray = y_fd(y, np.dot(x_err, W_xy.T))
-    # yz_dW = np.dot(y_err, z.T)
-    yz_dW = np.dot(z[np.newaxis].T, y_err[np.newaxis])
+    y_err: ndarray = y_fd(y, np.dot(z_err, W_yz))
+    xy_dW = np.dot(x[np.newaxis].T, y_err[np.newaxis])
 
-    z_err: ndarray = z_fd(z, np.dot(y_err, W_yz.T))
+    x_err: ndarray = np.dot(y_err, W_xy)
 
     error = IterError(x_err, y_err, z_err)
-    dW_sum = DeltaWeight(xy_dW, yz_dW)
+    dW_sum = DeltaWeight(xy_dW.T, yz_dW.T)
+
     return error, dW_sum
 
 
@@ -328,7 +328,7 @@ def feedforward_train(inp_batch: List[Tuple[ndarray, ndarray]],
             y.fill(0)
             iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
 
-            iter_err, dW_sum = train_last_iter(inp, iter_states[-1], lr=lr, W_xy=W_xy, W_yz=W_yz)
+            iter_err, dW_sum = train_last_iter(label, iter_states[-1], lr=lr, W_xy=W_xy, W_yz=W_yz)
 
             for iter_state in reversed(iter_states[-(last_iterations_to_train + 1): -1]):
                 iter_err, dW_sum = train_iter(iter_state=iter_state,
@@ -377,7 +377,7 @@ def feedforward_train_test():
 
     mse_start = feedforward_test(test_batch[0:1], iter_cnt=iter_cnt)
 
-    feedforward_train(inp_batch=test_batch[0:1], epoch_cnt=10, lr0=0.07, iter_cnt=iter_cnt, last_iterations_to_train=10)
+    feedforward_train(inp_batch=test_batch[0:1], epoch_cnt=100, lr0=0.07, iter_cnt=iter_cnt, last_iterations_to_train=1)
 
     mse_trained = feedforward_test(test_batch[0:1], iter_cnt=iter_cnt)
 
