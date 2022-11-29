@@ -1,12 +1,12 @@
 from dataclasses import dataclass
-from typing import NamedTuple, List
+from typing import NamedTuple, List, Any, Tuple
 
 import numpy as np
 from numpy import ndarray
 
 from scipy.special import softmax
 
-from datapoint_generation import Cluster, generate_clusters
+from datapoint_generation import Cluster, generate_clusters, generate_batch
 
 
 class IterState(NamedTuple):
@@ -29,7 +29,7 @@ class DeltaWeight:
 
 N_x = 128
 N_y = 128 * 2
-N_z = 128
+N_z = 2
 
 b2 = 0.2
 b3 = 0.3
@@ -47,6 +47,10 @@ z = np.zeros(N_z)
 # synapse weights matrices
 W_xy: ndarray = np.random.rand(N_y, N_x) * 0.001
 W_yz: ndarray = np.random.rand(N_z, N_y) * 0.001
+
+
+def mse(tar: ndarray, out: ndarray):
+    return np.sum((tar - out) ** 2) / out.size
 
 
 def z_update(y: ndarray, W_yz: ndarray):
@@ -91,6 +95,7 @@ def feedforward_sync(inp: ndarray, y: ndarray, z: ndarray, W_xy: ndarray, W_yz: 
     iters_states = []
 
     prev_energy = energy
+    start_energy = energy
     real_iter_cnt = 0
     for iter_idx in range(iter_cnt):
         prev_x = np.copy(x)
@@ -122,8 +127,8 @@ def feedforward_sync(inp: ndarray, y: ndarray, z: ndarray, W_xy: ndarray, W_yz: 
         real_iter_cnt += 1
 
     print(f'{energy=}')
-    print(f'{(energy - prev_energy)=}')
-    print(f'{real_iter_cnt=}')
+    print(f'{(energy - start_energy)=}')
+    print(f'{real_iter_cnt=} {z=}')
 
     return iters_states
 
@@ -277,6 +282,8 @@ def train(inp_batch: List[ndarray],
 
         dW_batch = DeltaWeight(np.zeros(W_xy.shape), np.zeros(W_yz.shape))
         for inp in inp_batch:
+            # y.fill(0)
+            # z.fill(0)
             iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
             iter_err, dW_sum = train_last_iter(inp, iter_states[-1], lr=lr, W_xy=W_xy, W_yz=W_yz)
             for iter_state in reversed(iter_states[-(last_iterations_to_train + 1): -1]):
@@ -300,6 +307,81 @@ def train(inp_batch: List[ndarray],
     mse = mse / len(inp_batch)
 
     print(f'{first_mse=} {mse=} {(mse - first_mse)=} {(first_mse / mse if mse else 0)=}')
+
+
+def feedforward_train(inp_batch: List[Tuple[ndarray, ndarray]],
+                      epoch_cnt: int = 10,
+                      lr0: float = 0.01,
+                      iter_cnt: int = 100,
+                      last_iterations_to_train: int = 10, ):
+    global W_xy, W_yz, z
+
+    for epoch_idx in range(epoch_cnt):
+        print(f'{epoch_idx=}')
+        lr = (epoch_cnt - epoch_idx) * lr0
+        print(f'{lr=}')
+
+        dW_batch = DeltaWeight(np.zeros(W_xy.shape), np.zeros(W_yz.shape))
+
+        for inp, label in inp_batch:
+            z = np.copy(label)
+            y.fill(0)
+            iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
+
+            iter_err, dW_sum = train_last_iter(inp, iter_states[-1], lr=lr, W_xy=W_xy, W_yz=W_yz)
+
+            for iter_state in reversed(iter_states[-(last_iterations_to_train + 1): -1]):
+                iter_err, dW_sum = train_iter(iter_state=iter_state,
+                                              prev_err=iter_err,
+                                              W_xy=W_xy,
+                                              W_yz=W_yz,
+                                              dW_sum=dW_sum, )
+
+            trained_iter_cnt = min(last_iterations_to_train, len(iter_states))
+            trained_iter_cnt = trained_iter_cnt - 1 if trained_iter_cnt > 1 else 1
+
+            dW_batch.xy += (dW_sum.xy / trained_iter_cnt)
+            dW_batch.yz += (dW_sum.yz / trained_iter_cnt)
+
+        dW_batch.xy = dW_batch.xy / len(inp_batch)
+        dW_batch.yz = dW_batch.yz / len(inp_batch)
+
+        W_xy -= lr * dW_batch.xy
+        W_yz -= lr * dW_batch.yz
+
+
+def feedforward_test(test_batch: List[Tuple[ndarray, ndarray]], iter_cnt: int):
+    global z
+
+    error = 0
+
+    for inp, target_out in test_batch:
+        z.fill(0)
+        y.fill(0)
+        iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
+        out = iter_states[-1].z
+        print(f'{out=} {target_out=}')
+        error += mse(target_out, out)
+
+    error /= len(test_batch)
+    print(f'mse: {error}')
+
+    return error
+
+
+def feedforward_train_test():
+    cls_size = 5
+    iter_cnt = 100
+
+    train_batch, test_batch = generate_batch(ns_clstr=[cls_size, cls_size], cluster_std=0.04, n_features=x.size)
+
+    mse_start = feedforward_test(test_batch[0:1], iter_cnt=iter_cnt)
+
+    feedforward_train(inp_batch=test_batch[0:1], epoch_cnt=10, lr0=0.07, iter_cnt=iter_cnt, last_iterations_to_train=10)
+
+    mse_trained = feedforward_test(test_batch[0:1], iter_cnt=iter_cnt)
+
+    print(f'{mse_start / mse_trained if mse_trained > 0 else 0}')
 
 
 def test_train():
@@ -338,4 +420,5 @@ def test_train():
 # test_feedforward()
 # test_iter_train(lr0=0.01)
 # train_one(epoch_cnt=100, lr0=0.1, iter_cnt=100, last_iterations_to_train=2)
-test_train()
+# test_train()
+feedforward_train_test()
