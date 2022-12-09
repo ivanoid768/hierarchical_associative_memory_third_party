@@ -277,11 +277,17 @@ def train(inp_batch: List[ndarray],
 
         dW_batch = DeltaWeight(np.zeros(W_xy.shape), np.zeros(W_yz.shape))
         for inp in inp_batch:
+            y.fill(0)
+            z.fill(0)
             iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
             iter_err, dW_sum = train_last_iter(inp, iter_states[-1], lr=lr, W_xy=W_xy, W_yz=W_yz)
+
             for iter_state in reversed(iter_states[-(last_iterations_to_train + 1): -1]):
-                iter_err, dW_sum = train_iter(iter_state=iter_state, prev_err=iter_err, W_xy=W_xy, W_yz=W_yz,
-                                              dW_sum=dW_sum)
+                iter_err, dW_sum = train_iter(iter_state=iter_state,
+                                              prev_err=iter_err,
+                                              W_xy=W_xy,
+                                              W_yz=W_yz,
+                                              dW_sum=dW_sum,)
 
             trained_iter_cnt = min(last_iterations_to_train, len(iter_states))
             trained_iter_cnt = trained_iter_cnt - 1 if trained_iter_cnt > 1 else 1
