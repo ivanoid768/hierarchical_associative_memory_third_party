@@ -171,6 +171,7 @@ def train_last_iter(inp: ndarray, iter_state: IterState, lr: float, W_xy: ndarra
 
     error = IterError(x_err, y_err, z_err)
     dW_sum = DeltaWeight(xy_dW, yz_dW)
+
     return error, dW_sum
 
 
@@ -261,7 +262,8 @@ def train(inp_batch: List[ndarray],
           epoch_cnt: int = 10,
           lr0: float = 0.01,
           iter_cnt: int = 100,
-          last_iterations_to_train: int = 10, ):
+          last_iterations_to_train: int = 10,
+          new_sample_iter_cnt_coef: float = 2.0,):
     global W_xy, W_yz
 
     mse_sum = 0
@@ -270,34 +272,61 @@ def train(inp_batch: List[ndarray],
         mse_sum += np.sum((iter_states[-1].x - inp) ** 2) / x.size
     first_mse = mse_sum / len(inp_batch)
 
+    cluster_center_list = []
+
     for epoch_idx in range(epoch_cnt):
         print(f'{epoch_idx=}')
         lr = (epoch_cnt - epoch_idx) * lr0
         print(f'{lr=}')
 
         dW_batch = DeltaWeight(np.zeros(W_xy.shape), np.zeros(W_yz.shape))
+        real_iter_cnt_avg = []
         for inp in inp_batch:
             y.fill(0)
             z.fill(0)
+
             iter_states = feedforward_sync(inp, y, z, W_xy, W_yz, iter_cnt=iter_cnt)
-            iter_err, dW_sum = train_last_iter(inp, iter_states[-1], lr=lr, W_xy=W_xy, W_yz=W_yz)
+            real_iter_cnt = len(iter_states)
+
+            if real_iter_cnt > (np.mean(np.array(real_iter_cnt_avg))) * new_sample_iter_cnt_coef:
+                iter_err, dW_sum = train_last_iter(inp, iter_states[-1], lr=lr, W_xy=W_xy, W_yz=W_yz)
+
+                cluster_center_list.append(inp)
+            else:
+                out_x = iter_states[-1].x
+
+                min_mse = 0
+                min_cls_ids = 0
+                for cls_idx, cls in enumerate(cluster_center_list):
+                    mse = np.sum((out_x - cls) ** 2) / out_x.size
+
+                    if mse < min_mse:
+                        min_cls_ids = cls_idx
+
+                iter_err, dW_sum = train_last_iter(cluster_center_list[min_cls_ids], iter_states[-1], lr=lr, W_xy=W_xy, W_yz=W_yz)
+
+                real_iter_cnt_avg.append(real_iter_cnt)
 
             for iter_state in reversed(iter_states[-(last_iterations_to_train + 1): -1]):
                 iter_err, dW_sum = train_iter(iter_state=iter_state,
                                               prev_err=iter_err,
                                               W_xy=W_xy,
                                               W_yz=W_yz,
-                                              dW_sum=dW_sum,)
+                                              dW_sum=dW_sum, )
 
             trained_iter_cnt = min(last_iterations_to_train, len(iter_states))
             trained_iter_cnt = trained_iter_cnt - 1 if trained_iter_cnt > 1 else 1
             dW_batch.xy += (dW_sum.xy / trained_iter_cnt)
             dW_batch.yz += (dW_sum.yz / trained_iter_cnt)
 
+            # print(f'{inp=} {cluster_center_list=}')
+
         dW_batch.xy = dW_batch.xy / len(inp_batch)
         dW_batch.yz = dW_batch.yz / len(inp_batch)
         W_xy -= lr * dW_batch.xy
         W_yz -= lr * dW_batch.yz
+
+        print(f'{cluster_center_list=}')
 
     mse = 0
     for inp in inp_batch:
@@ -313,32 +342,41 @@ def test_train():
 
     clusters, x, _ = generate_clusters(ns_clstr=[2, 2, 1], cluster_std=0.04, n_features=x.size)
 
-    batch = [clusters[0].data_points[0], clusters[1].data_points[0]]
-    train(inp_batch=batch, epoch_cnt=100, lr0=0.07, iter_cnt=100, last_iterations_to_train=10)
+    batch = [clusters[0].data_points[0],
+             clusters[0].data_points[1],
+             clusters[1].data_points[0],
+             clusters[1].data_points[1],
+             clusters[2].data_points[0],]
 
-    real_iter_cnt = []
+    train(inp_batch=batch,
+          epoch_cnt=100,
+          lr0=0.07, iter_cnt=100,
+          last_iterations_to_train=10,
+          new_sample_iter_cnt_coef=2.0,)
 
-    print(f'cluster_datapoint')
-    trained_cluster_datapoint = clusters[0].data_points[0]
-    iter_states = feedforward_sync(trained_cluster_datapoint, y, z, W_xy, W_yz, iter_cnt=100)
-    real_iter_cnt.append(len(iter_states))
+    # real_iter_cnt = []
 
-    print(f'trained_cluster_datapoint')
-    trained_cluster_datapoint = clusters[0].data_points[1]
-    iter_states = feedforward_sync(trained_cluster_datapoint, y, z, W_xy, W_yz, iter_cnt=100)
-    real_iter_cnt.append(len(iter_states))
-
-    print(f'trained_cluster_datapoint_2')
-    trained_cluster_datapoint = clusters[1].data_points[1]
-    iter_states = feedforward_sync(trained_cluster_datapoint, y, z, W_xy, W_yz, iter_cnt=100)
-    real_iter_cnt.append(len(iter_states))
-
-    print(f'new_cluster_datapoint')
-    trained_cluster_datapoint = clusters[2].data_points[0]
-    iter_states = feedforward_sync(trained_cluster_datapoint, y, z, W_xy, W_yz, iter_cnt=100)
-    real_iter_cnt.append(len(iter_states))
-
-    print(f'{real_iter_cnt=}')
+    # print(f'cluster_datapoint')
+    # trained_cluster_datapoint = clusters[0].data_points[0]
+    # iter_states = feedforward_sync(trained_cluster_datapoint, y, z, W_xy, W_yz, iter_cnt=100)
+    # real_iter_cnt.append(len(iter_states))
+    #
+    # print(f'trained_cluster_datapoint')
+    # trained_cluster_datapoint = clusters[0].data_points[1]
+    # iter_states = feedforward_sync(trained_cluster_datapoint, y, z, W_xy, W_yz, iter_cnt=100)
+    # real_iter_cnt.append(len(iter_states))
+    #
+    # print(f'trained_cluster_datapoint_2')
+    # trained_cluster_datapoint = clusters[1].data_points[1]
+    # iter_states = feedforward_sync(trained_cluster_datapoint, y, z, W_xy, W_yz, iter_cnt=100)
+    # real_iter_cnt.append(len(iter_states))
+    #
+    # print(f'new_cluster_datapoint')
+    # trained_cluster_datapoint = clusters[2].data_points[0]
+    # iter_states = feedforward_sync(trained_cluster_datapoint, y, z, W_xy, W_yz, iter_cnt=100)
+    # real_iter_cnt.append(len(iter_states))
+    #
+    # print(f'{real_iter_cnt=}')
 
 
 # test_feedforward()
